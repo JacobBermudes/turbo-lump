@@ -78,6 +78,7 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Отправка данных из кэша: %s", time.Now().Format(time.RFC3339))
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Access-Control-Allow-Origin", "*") // Разрешаем CORS
 	w.Write(data)
 }
 
