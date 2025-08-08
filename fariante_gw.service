@@ -1,0 +1,15 @@
+[Unit]
+Description=Go fariante gateway
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/fariante_gw
+Restart=always
+RestartSec=10
+DynamicUser=Yes
+WorkingDirectory=/usr/local/bin
+Environment="PASS_1C=integration"
+
+[Install]
+WantedBy=multi-user.target
