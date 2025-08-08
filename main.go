@@ -75,6 +75,8 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("Отправка данных из кэша: %s", time.Now().Format(time.RFC3339))
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Write(data)
 }
