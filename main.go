@@ -78,7 +78,7 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Отправка данных из кэша: %s", time.Now().Format(time.RFC3339))
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Access-Control-Allow-Origin", "*") // Разрешаем CORS
+	w.Header().Set("Access-Control-Allow-Origin", "https://jacobbermudes.github.io")
 	w.Write(data)
 }
 
@@ -98,7 +98,7 @@ func main() {
 
 	port := ":3210"
 	log.Printf("Сервер запущен на порту %s", port)
-	if err := http.ListenAndServe(port, nil); err != nil {
+	if err := http.ListenAndServeTLS(port, "/etc/letsencrypt/live/fariante.ru/fullchain.pem", "/etc/letsencrypt/live/fariante.ru/privkey.pem", nil); err != nil {
 		log.Fatalf("Ошибка запуска сервера: %v", err)
 	}
 }
