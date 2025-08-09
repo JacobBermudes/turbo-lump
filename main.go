@@ -7,25 +7,39 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"sync"
 	"time"
+
+	"github.com/go-redis/redis"
 )
 
-// Структура для кэша данных
-type Cache struct {
-	data []byte
-	mu   sync.RWMutex
+type Product struct {
+	Name  string `json:"name"`
+	Artc  string `json:"artc"`
+	Units string `json:"units"`
 }
 
 type updResp struct {
 	UpdTm string `json:"updTm"`
 }
 
-// Глобальный кэш
-var cache = &Cache{}
+var rdb *redis.Client
 
 // URL 1С
 const oneCUrl = "https://1c.fariante.ru/acc/hs/catalog/all"
+
+func init() {
+	redispass := os.Getenv("PASS_REDIS")
+	if redispass == "" {
+		log.Fatal("Переменная окружения PASS_REDIS не установлена")
+	}
+
+	rdb = redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: redispass,
+		DB:       0,
+	})
+	fmt.Printf("Подключение к Redis: %s\n", rdb.Options().Addr)
+}
 
 func fetchDataFrom1C() (string, error) {
 
@@ -53,27 +67,60 @@ func fetchDataFrom1C() (string, error) {
 		return "Ошибка", fmt.Errorf("статус %d", resp.StatusCode)
 	}
 
-	data, err := io.ReadAll(resp.Body)
+	bodyRed, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "Неразборные данные в теле", err
 	}
 
-	cache.mu.Lock()
-	cache.data = data
-	cache.mu.Unlock()
+	var products []Product
+	if err := json.Unmarshal(bodyRed, &products); err != nil {
+		return "Ошибка разбора тела", err
+	}
+
+	for _, product := range products {
+
+		dataJSON, err := json.Marshal(product)
+		if err != nil {
+			return "Ошибка сериализации данных", err
+		}
+
+		key := fmt.Sprintf("%s", product.Name)
+		err = rdb.Set(key, dataJSON, 0).Err()
+		if err != nil {
+			return "Ошибка записи в Redis", err
+		}
+	}
 
 	return time.Now().Format(time.DateTime), nil
 }
 
-// Возврат кешированных данных
 func dataGetHandler(w http.ResponseWriter, r *http.Request) {
 
-	cache.mu.RLock()
-	data := cache.data
-	cache.mu.RUnlock()
+	keys, err := rdb.Keys("*").Result()
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "Ошибка получения ключей из Redis: %v"}`, err), http.StatusInternalServerError)
+		return
+	}
 
-	if data == nil {
-		http.Error(w, `{"error": "Данные недоступны, попробуйте позже"}`, http.StatusServiceUnavailable)
+	var products []Product
+	for _, key := range keys {
+		data, err := rdb.Get(key).Result()
+		if err != nil {
+			http.Error(w, fmt.Sprintf(`{"error": "Ошибка чтения ключа %s из Redis: %v"}`, key, err), http.StatusInternalServerError)
+			return
+		}
+
+		var product Product
+		if err := json.Unmarshal([]byte(data), &product); err != nil {
+			http.Error(w, fmt.Sprintf(`{"error": "Ошибка разбора данных для ключа %s: %v"}`, key, err), http.StatusInternalServerError)
+			return
+		}
+		products = append(products, product)
+	}
+
+	data, err := json.Marshal(products)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "Ошибка сериализации данных: %v"}`, err), http.StatusInternalServerError)
 		return
 	}
 
@@ -90,7 +137,6 @@ func dataUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Access-Control-Allow-Origin", "*") //исправить для прода
 
 	updDate, err := fetchDataFrom1C()
 
