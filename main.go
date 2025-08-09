@@ -77,6 +77,11 @@ func fetchDataFrom1C() (string, error) {
 		return "Ошибка разбора тела", err
 	}
 
+	err = rdb.FlushDB().Err()
+	if err != nil {
+		return "Ошибка очистки базы данных Redis", err
+	}
+
 	for _, product := range products {
 
 		dataJSON, err := json.Marshal(product)
